@@ -1,0 +1,74 @@
+import random 
+import numpy as np
+import pandas as pd
+from itertools import product
+
+def RPS(choice):
+  if choice == 'R':
+    return 'P'
+  elif choice == 'P':
+    return 'S'
+  elif choice == 'S':
+    return 'R'
+
+
+def rules(user,agent):
+  if user == 'R' and agent == 'S':
+    return 'win'
+  elif user == 'R' and agent == 'P':
+    return 'defeat'
+
+  elif user == 'S' and agent == 'P':
+    return 'win'
+  elif user == 'S' and agent == 'R':
+    return 'defeat'
+
+  elif user == 'P' and agent == 'R':
+    return 'win'
+  elif user == 'P' and agent == 'S':
+    return 'defeat'
+  else:
+    return 'tie' 
+ 
+
+ls = np.zeros((9,3)) 
+choices = ['R','P','S']
+
+df = pd.DataFrame(ls, columns = list(choices), index=[''.join(l) for l in product(choices, repeat=2)])
+defeats = wins = ties = 0 
+user_choices = ['R','S']
+agent_choices = ['P','R']
+output = ['RP','SR']
+i = 0 
+
+#random.seed(0)
+
+while i < 1000:
+  i +=1 
+  user_choice = random.choice(choices)
+  #agent_choice = random.choice(choices)
+  
+  user_choices.append(user_choice) #append user's choices 
+
+  df[user_choices[i-1]][user_choices[i-2] + agent_choices[i-2]] +=1 #next move based on the previous output of both 
+
+  #most frequent move after previous result
+  predicted_move = df.loc[[output[i-1]]].idxmax(axis = 'columns')  #returns the label of the column with the most occurences 
+  predicted_move = predicted_move[0]
+
+  agent_choice = RPS(predicted_move) #defeat predicted move 
+
+  agent_choices.append(agent_choice) #append agent's choices 
+
+  output.append(user_choice + agent_choice) #append output of both 
+
+  result = rules(user_choice, agent_choice) #get result 
+
+  if result == 'defeat':
+    defeats +=1 
+  elif result == 'win':
+    wins +=1 
+  else:
+    ties +=1 
+
+print(f'For a simulation of a 1000 games of RPS, they were {defeats} agent wins, {ties} ties and {wins} player wins')
