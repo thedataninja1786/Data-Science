@@ -1,0 +1,172 @@
+
+#!pip install alpha_vantage 
+#!pip install alpha_vantage_pandas
+#!pip install pmdarima
+
+ALPHAVANTAGE_API_KEY = '##############'
+
+import matplotlib.pyplot as plt
+import matplotlib
+import requests
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+import numpy as np
+import pandas as pd
+import warnings
+import itertools
+import statsmodels
+import time 
+
+warnings.filterwarnings("ignore")
+plt.style.use('fivethirtyeight')
+
+matplotlib.rcParams['axes.labelsize'] = 14
+matplotlib.rcParams['xtick.labelsize'] = 12
+matplotlib.rcParams['ytick.labelsize'] = 12
+matplotlib.rcParams['text.color'] = 'k'
+
+#response = requests.get('https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=IBM&apikey=demo')
+
+'''Defining the URL and specifying the parameteres'''
+url = 'https://www.alphavantage.co/query?'
+params = {'function': 'TIME_SERIES_DAILY',
+		      'symbol': 'IBM',
+          'interval': '1min',
+          #'time_period' : 60,
+          'outputsize' : 'full',
+		      'apikey': ALPHAVANTAGE_API_KEY}
+
+def load_data(base_url, parameters):
+  time.sleep(2)
+  response = requests.get(base_url, params=params)
+  data = response.json()
+  _,header = response.json()
+  df = pd.DataFrame.from_dict(data[header], orient='index')
+
+  #Clean up column names
+  df_cols = [i.split(' ')[1] for i in df.columns]
+  df.columns = df_cols
+  df.reset_index(inplace=True)
+  df = df.rename(columns = {'index':'Date'})
+  return df
+
+
+df = load_data(base_url = url,parameters = params)
+df = df.sort_values('Date',ascending=True)
+
+#Replace missing data with the median 
+for column in df[:]:
+  print('\n' + str(column)+':' +'  '+ str(df[column].isnull().sum()) + ' missing values')
+  if df[column].isnull().sum() > 0:
+    na_replacement_choice = input('Do you want to replace the missing values with the column avg?')
+    if na_replacement_choice == "Yes":
+      df[column].fillna((df[column].median()), inplace=True)
+    else:
+      print('No replacements were made') 
+
+
+#Model the opening data 
+opening_prices = df[['Date', 'open']].copy()
+
+#Print the length of the data 
+print('Duration of data is between: ' + str(opening_prices['Date'].min()) + ' to ' +  str(opening_prices['Date'].max())+'.\n')
+#print(opening_prices.head(5))
+
+#Indexing with time series data 
+opening_prices['Date'] = pd.to_datetime(opening_prices['Date'])
+opening_prices = opening_prices.set_index('Date')
+opening_prices['open'] = pd.to_numeric(opening_prices['open'])
+
+#Split into train/test data
+train = opening_prices[:round(len(opening_prices)*0.85)]
+test = opening_prices[-round(len(opening_prices)*0.15):]
+
+#opening_prices.plot(figsize=(20,8))
+#plt.show()
+
+plt.plot(train)
+plt.plot(test)
+plt.show()
+
+
+print(type(train.index)) ;  print(type(opening_prices.index))
+
+
+from pylab import rcParams
+rcParams['figure.figsize'] = 18, 8
+
+#Visualize our data by decomposing it to trend,seasonality and random noise
+decomposition = sm.tsa.seasonal_decompose(opening_prices['open'],freq = 365,model='additive')
+fig = decomposition.plot()
+plt.show()
+
+
+
+#Use a “grid search” to find the optimal set of parameters that yields the best performance for our model
+
+p = q = range(1, 6)
+d = range(1,3)
+
+pdq = list(itertools.product(p, d, q))
+seasonal_pdq = [(x[0], x[1], x[2], 365) for x in list(itertools.product(p, d, q))]
+
+
+#Print some examples 
+print('Examples of parameter combinations for Seasonal ARIMA...\n')
+print('ARIMA: {} x {}'.format(pdq[1], seasonal_pdq[2]))
+print('ARIMA: {} x {}'.format(pdq[2], seasonal_pdq[3]))
+print('ARIMA: {} x {}'.format(pdq[2], seasonal_pdq[4]))
+
+
+train.index = pd.DatetimeIndex(train.index).to_period('D')
+
+
+
+#Use two approaches to find the best ARIMA model that yields the lowest AIC 
+from statsmodels.tsa.arima_model import ARIMA
+import pmdarima as pm
+
+'''First Approach'''
+ds = {} #create dictionary to append the AIC of each parameter 
+for param in pdq:
+  mod = statsmodels.tsa.arima.model.ARIMA(train['open'], order = param)
+  results = mod.fit()
+  print(f'ARIMA{param} - AIC: {round(results.aic)}')
+  ds.update({param : results.aic})
+
+      
+min_AIC = min(ds.items(), key=lambda x: x[1])
+min_AIC = min_AIC[1] #Use this AIC to check against the auto arima model 
+order = (min(ds, key=ds.get)) #Get the parameters that present the lowest AIC
+model = statsmodels.tsa.arima.model.ARIMA(train['open'],order = order) # order = order
+model_0 = model.fit()
+
+'''Second Approach''' 
+model_1 = pm.auto_arima(train['open'], 
+                        start_p=1,        # starting p 
+                        start_q=1,        # starting q
+                        test='adf',       # use adftest to find optimal 'd'
+                        max_p=5,          # maximum p 
+                        max_q=5,          # maximum q
+                        m=1,              # frequency of series
+                        d=None,           # let model determine 'd'
+                        seasonal=False,   # No Seasonality
+                        start_P=0, 
+                        D=0, 
+                        trace=True,
+                        error_action='ignore',  
+                        suppress_warnings=True, 
+                        stepwise=True)
+
+min_AIC_1 = model_1.aic()
+
+
+
+if min_AIC < min_AIC_1:
+  final_model = model_0
+else:
+  final_model = model_1
+
+print(final_model.summary())
+final_model.plot_diagnostics(figsize=(16, 8))
+plt.show()
