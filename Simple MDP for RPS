@@ -34,7 +34,7 @@ def rules(user,agent):
 ls = np.zeros((9,3)) 
 choices = ['R','P','S']
 
-df = pd.DataFrame(ls, columns = list(choices), index=[''.join(l) for l in product(choices, repeat=2)])
+df = pd.DataFrame(ls, columns = list(choices), index=[''.join(x) for x in product(choices, repeat=2)])
 defeats = wins = ties = 0 
 user_choices = ['R','S']
 agent_choices = ['P','R']
@@ -43,32 +43,37 @@ i = 0
 
 #random.seed(0)
 
+# Generate 1000 simulations 
 while i < 1000:
   i +=1 
   user_choice = random.choice(choices)
   #agent_choice = random.choice(choices)
   
-  user_choices.append(user_choice) #append user's choices 
+  user_choices.append(user_choice) 
+  
+  # Next move based on the previous output of both 
+  df[user_choices[i-1]][user_choices[i-2] + agent_choices[i-2]] +=1 
 
-  df[user_choices[i-1]][user_choices[i-2] + agent_choices[i-2]] +=1 #next move based on the previous output of both 
-
-  #most frequent move after previous result
-  predicted_move = df.loc[[output[i-1]]].idxmax(axis = 'columns')  #returns the label of the column with the most occurences 
+  # Most frequent move after previous result
+  predicted_move = df.loc[[output[i-1]]].idxmax(axis = 'columns') 
+  # Returns the label of the column with the most occurences 
   predicted_move = predicted_move[0]
+  
+  # For defeating predicted action 
+  agent_choice = RPS(predicted_move)  
 
-  agent_choice = RPS(predicted_move) #defeat predicted move 
+  agent_choices.append(agent_choice)
 
-  agent_choices.append(agent_choice) #append agent's choices 
-
-  output.append(user_choice + agent_choice) #append output of both 
-
-  result = rules(user_choice, agent_choice) #get result 
+  output.append(user_choice + agent_choice) 
+  
+  # Get result 
+  result = rules(user_choice, agent_choice) 
 
   if result == 'defeat':
-    defeats +=1 
+    defeats += 1 
   elif result == 'win':
-    wins +=1 
+    wins += 1 
   else:
-    ties +=1 
+    ties += 1 
 
 print(f'For a simulation of a 1000 games of RPS, they were {defeats} agent wins, {ties} ties and {wins} player wins')
