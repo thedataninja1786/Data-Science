@@ -1,147 +1,203 @@
-'''Import necessary modules '''
+# Importing the necessary modules
 import nltk
-import re 
-import string 
-import pandas as pd 
-import numpy as np 
+import re
+import string
+import pandas as pd
+import numpy as np
+
 nltk.download('twitter_samples')
 nltk.download('stopwords')
 from nltk.corpus import stopwords
 from nltk.corpus import twitter_samples
-positive_tweets =twitter_samples.strings('positive_tweets.json')
-negative_tweets =twitter_samples.strings('negative_tweets.json')
 
-'''Load the train and test data''' 
-positive_tweets =twitter_samples.strings('positive_tweets.json')
-negative_tweets =twitter_samples.strings('negative_tweets.json')
+positive_tweets = twitter_samples.strings('positive_tweets.json')
+negative_tweets = twitter_samples.strings('negative_tweets.json')
+
+# Load the train and test data
+positive_tweets = twitter_samples.strings('positive_tweets.json')
+negative_tweets = twitter_samples.strings('negative_tweets.json')
 
 positive_train_tweets = positive_tweets[:4000]
 positive_test_tweets = positive_tweets[4000:]
 negative_train_tweets = negative_tweets[:4000]
 negative_test_tweets = negative_tweets[4000:]
 
-'''Assign label 1 for positive tweets and 0 for negative tweets'''
-positive_df = pd.DataFrame(positive_train_tweets) 
-positive_df['label'] = 1 
-negative_df =   pd.DataFrame(negative_train_tweets)
-negative_df['label'] = 0 
-df = pd.concat([positive_df ,negative_df], axis = 0 )
+# Assign label 1 for positive tweets and 0 for negative tweets
+train_positive_df = pd.DataFrame(positive_train_tweets)
+train_positive_df['label'] = 1
+train_negative_df = pd.DataFrame(negative_train_tweets)
+train_negative_df['label'] = 0
+
+# Create the dataset
+df = pd.concat([train_positive_df, train_negative_df], axis=0)
 df = df.reset_index(drop=True)
-df=df.rename(columns = {0:'text'})
+df = df.rename(columns={0: 'text'})
+
+# Load the stopwords
+stop_words = set(stopwords.words('english'))
 
 
-'''Define the functions for prepocessing text, creating sequences and padding'''
+# Define the functions for prepocessing text, creating sequences and padding
+class textPreprocessing():
+    """
+    Prepossesses and cleans the input text by removing urls, punctuations, and stopwords.
+    """
 
-def remove_URL(text): #remove urls
-  url = re.compile(r'https?://\S+|www\.\S+')
-  return url.sub(r"",text)
+    def remove_url(text):
+        """
+        :param text: input string
+        :return:     string without url
+        """
+        url = re.compile(r'https?://\S+|www\.\S+')
+        return url.sub(r"", text)
 
-def remove_punct(text): #remove punctuations 
-  translator = str.maketrans("","",string.punctuation)
-  return text.translate(translator)
+    def remove_punct(text):
+        """
+        :param text: input string
+        :return:     string without punctuations
+        """
+        translator = str.maketrans("", "", string.punctuation)
+        return text.translate(translator)
 
-stop_words = set(stopwords.words('english')) 
+    def remove_stopwords(text):
+        """
+        :param text: input string
+        :return:     string without stopwords
+        """
+        filtered_words = [word.lower() for word in text.split() if word.lower() not in stop_words]
+        return " ".join(filtered_words)
 
-def remove_stopwords(text): #remove stopwords 
-  filtered_words = [word.lower() for word in text.split() if word.lower() not in stop_words]
-  return " ".join(filtered_words)
 
-def count_frequency(df,text): #count the frequency of each word 
-  freq_dict = {}
-  for row in df[text]:
-    for word in row.split(): #tokenize
-      if word not in freq_dict:
-        freq_dict[word] = 1 
-      else:
-        freq_dict[word] += 1
-  return freq_dict 
+class textConversion():
+    """
+    Counts the occurrence of each word in the text, creates an index dictionary for each unique word,
+    converts text to sequences, and applies padding so all sequences have the same length.
+    """
 
-def find_unique_words(df,text): # find the unique words
-  all_unique_words = []
-  for row in df[text]:
-    for word in row.split():
-      if word not in all_unique_words:
-        all_unique_words.append(word)
-  all_unique_words = sorted(list(set(all_unique_words)))
-  return all_unique_words
+    def count_frequency(df, text):
+        """
+        :param text: input string
+        :return:     counts the frequency of each word
+        """
+        freq_dict = {}
+        for row in df[text]:
+            for word in row.split():  # tokenize
+                if word not in freq_dict:
+                    freq_dict[word] = 1
+                else:
+                    freq_dict[word] += 1
+        return freq_dict
 
-def index_assignment(all_unique_words): #assign index to each word
-  index_dict = {}
-  count = 0 
-  for word in all_unique_words:
-    count += 1 
-    index_dict[word] = count 
-  return index_dict
+    def find_unique_words(df, text):
+        """
+        :param text: input string
+        :return:     list of unique words
+        """
+        unique_words = []
+        for row in df[text]:
+            for word in row.split():
+                if word not in unique_words:
+                    unique_words.append(word)
+        unique_words = sorted(list(set(unique_words)))
+        return unique_words
 
-def text_to_sequences(df,text,index_dict): #convert text to sequence
-  text_sequences = []
-  for row in df[text]:
-    empty = []
-    for word in row.split():
-      empty.append(index_dict.get(word))
-    text_sequences.append(empty)
-  return text_sequences
+    def index_assignment(unique_words):
+        """
+        :return: assigned index to each unique word
+        """
+        index_dict = {}
+        count = 0
+        for word in unique_words:
+            count += 1
+            index_dict[word] = count
+        return index_dict
 
- 
-def padded_sequences(text_sequences:list): #pad sequences
-  padded_sequences = []
-  max_len = 30 #choose an arbritrary number 
-  for text_sequence in text_sequences:
-    length = len(text_sequence)
-    i = 0 
-    while  length + i < max_len:
-      text_sequence.insert(i,0)
-      i += 1
-    padded_sequences.append(text_sequence)
-  return padded_sequences 
+    def text_to_sequences(df, text, index_dict):  # convert text to sequence
+        """
+        :param text:        input string
+        :param index_dict:  dictionary with the unique index for each word
+        :return:            the index for each word present in the input string
+        """
+        text_sequences = []
+        for row in df[text]:
+            empty = []
+            for word in row.split():
+                empty.append(index_dict.get(word))
+            text_sequences.append(empty)
+        return text_sequences
 
-'''Applying the functions to the thraining data''' 
-df['text']  = df['text'].apply(lambda x : remove_URL(x))
-df['text']  = df['text'].apply(lambda x : remove_punct(x))
-df['text']  = df['text'].apply(lambda x : remove_stopwords(x))
-frequencey_dict = count_frequency(df,'text')
-unique_words = find_unique_words(df,'text')
-index_dictionary = index_assignment(unique_words)
-train_sequences = text_to_sequences(df,'text',index_dictionary)
-train_padded = padded_sequences(train_sequences)
+    def padded_sequences(text_sequences, max_len, pad_val):
+        """
+        :param max_len: max length of the padded sequences
+        :param pad_val: value to fill with padding
+        :return:        applies padding so all text sequences have the same length
+        """
+        padded_sequences = []
+        for text_sequence in text_sequences:
+            length = len(text_sequence)
+            i = 0
+            while length + i < max_len:
+                text_sequence.insert(i, pad_val)
+                i += 1
+            padded_sequences.append(text_sequence)
+        return padded_sequences
 
-'''Classify text with Binary Labels using Logistic Regression'''
-#Initialize the wights vector 
+
+'''Applying the functions to the training data'''
+df['text'] = df['text'].apply(lambda x: textPreprocessing.remove_url(x))
+df['text'] = df['text'].apply(lambda x: textPreprocessing.remove_punct(x))
+df['text'] = df['text'].apply(lambda x: textPreprocessing.remove_stopwords(x))
+
+max_len = 30
+frequency_dict = textConversion.count_frequency(df, 'text')
+unique_words = textConversion.find_unique_words(df, 'text')
+index_dictionary = textConversion.index_assignment(unique_words)
+train_sequences = textConversion.text_to_sequences(df, 'text', index_dictionary)
+train_padded = textConversion.padded_sequences(train_sequences, max_len=max_len, pad_val=0)
+
+# Classify text with Binary Labels using Logistic Regression
+
+# Initialize the wights vector
 weights = []
 for _ in range(30):
-  weights.append(1/30)
+    weights.append(1 / 30)
 
-#Training the model 
+# Training the model
 predictions = []
 bias = 0.5
 lr = 0.0001
 m = 1 / len(train_padded[0])
 
-for i,element in enumerate(train_padded):
-  derivatives = []
-  prediction = 0 
-  actual = df['label'][i]
-  for j,pad in enumerate(element):
-    prediction += pad * weights[j]
-  prediction += bias 
-  sigmoid = 1 / (1 + np.exp(-prediction)) 
-  predictions.append(round(sigmoid))
+for i, element in enumerate(train_padded):
+    derivatives = []
+    prediction = 0
+    actual = df['label'][i]
+    for j, pad in enumerate(element):
+        prediction += pad * weights[j]
+    prediction += bias
+    sigmoid = 1 / (1 + np.exp(-prediction))
+    predictions.append(round(sigmoid))
 
-  for i in range(len(weights)):
-    dw = (1/m) * (element[i] * (sigmoid - actual)) * lr 
-    derivatives.append(dw)
+    for i in range(len(weights)):
+        # Calculate derivatives
+        dw = (1 / m) * (element[i] * (sigmoid - actual)) * lr
+        derivatives.append(dw)
 
-  for i,derivative in enumerate(derivatives):
-    weights[i] -= derivative 
-  
-  db = (1/m) * (sigmoid - actual) * lr
+    for i, derivative in enumerate(derivatives):
+        # Update weights
+        weights[i] -= derivative
 
-  bias -= db
+    # Calculate bias
+    db = (1 / m) * (sigmoid - actual) * lr
+    # Update bias
+    bias -= db
 
+# Append the predictions to the df
 df['predictions'] = predictions
 
-print('Accuracy is: ' + str(df['label'].sum() / df['predictions'].sum()))
-
-
-
-
+count = 0
+for label, prediction in zip(df['label'],df['predictions']):
+    if label == prediction:
+        count += 1
+        
+print(f'Accuracy is {count / len(df) * 100}%.')
