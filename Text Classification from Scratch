@@ -156,11 +156,10 @@ train_sequences = textConversion.text_to_sequences(df, 'text', index_dictionary)
 train_padded = textConversion.padded_sequences(train_sequences, max_len=max_len, pad_val=0)
 
 # Classify text with Binary Labels using Logistic Regression
-
-# Initialize the wights vector
+# Initialize the weights vector
 weights = []
-for _ in range(30):
-    weights.append(1 / 30)
+for _ in range(max_len):
+    weights.append(1 / max_len)
 
 # Training the model
 predictions = []
